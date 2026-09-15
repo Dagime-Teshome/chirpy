@@ -34,18 +34,21 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 
+func handleHealthz (w http.ResponseWriter , r *http.Request) {
+		w.Header().Add("Content-Type", " text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+}
 }
 func main() {
 	apiConfig := apiConfig{}
 	serv_mux := http.NewServeMux()
 	serv_mux.Handle("/app/", apiConfig.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
-	serv_mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Add("Content-Type", " text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	})
-	serv_mux.Handle("GET /metrics", http.HandlerFunc(apiConfig.returnCount))
-	serv_mux.Handle("POST /reset", http.HandlerFunc(apiConfig.resetCount))
+	// api end points
+	serv_mux.HandleFunc("GET api/healthz", handleHealthz)
+	serv_mux.Handle("GET api/metrics", http.HandlerFunc(apiConfig.returnCount))
+	serv_mux.Handle("POST api/reset", http.HandlerFunc(apiConfig.resetCount))
+	// server code
 	var srv http.Server
 	srv.Addr = ":8080"
 	srv.Handler = serv_mux
