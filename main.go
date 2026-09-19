@@ -1,12 +1,18 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync/atomic"
+
+	"github.com/Dagime-Teshome/chirpy/internal/database"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
 type apiHandler struct{}
@@ -15,6 +21,7 @@ func (apiHandler) ServeHTTP(http.ResponseWriter, *http.Request) {}
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
+	queries        database.Queries
 }
 
 func (cfg *apiConfig) returnCount(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +84,25 @@ func handleChirpValidate(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, 200, clean_body{Cleaned_Body: cleanText})
 }
 func main() {
-	apiConfig := apiConfig{}
+	// load enviroment variablse to os env file
+	godotenv.Load()
+	// get connection string from os env file
+	conn_string := os.Getenv("DB_URL")
+	// open a tcp connection to database server
+	db, err := sql.Open("postgres", conn_string)
+	if err != nil {
+		fmt.Println("database connection failed:", err)
+		return
+
+	}
+	// use sqlc generated code as ORM to add ,remove ,update data from database
+	database_queries := database.New(db)
+	// add the sqlc orm thingy to the config so handler and middleware have access to it.
+	apiConfig := apiConfig{
+		fileserverHits: atomic.Int32{},
+		queries:        *database_queries,
+	}
+	// server config code
 	serv_mux := http.NewServeMux()
 	serv_mux.Handle("/app/", apiConfig.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
 	// api end points
