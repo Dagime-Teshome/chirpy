@@ -6,17 +6,17 @@ import (
 )
 
 func respondWithError(w http.ResponseWriter, code int, msg string) error {
-	return respondWithJSON(w, 400, map[string]string{"error": msg})
+	return respondWithJSON(w, code, map[string]string{"error": msg})
 }
-func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) error {
+func respondWithJSON(w http.ResponseWriter, code int, payload any) error {
 
 	dat, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	w.WriteHeader(code)
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Write(dat)
-	return nil
+	w.WriteHeader(code)
+	_, err = w.Write(dat)
+	return err
 }
