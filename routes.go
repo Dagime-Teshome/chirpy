@@ -11,8 +11,9 @@ func routes(config *apiConfig) *http.ServeMux {
 	serv_mux.HandleFunc("GET /api/chirps/{chirpID}", config.GetChirp)
 	serv_mux.HandleFunc("GET /api/chirps", config.List_Chirps)
 	serv_mux.HandleFunc("POST /api/chirps", config.Handle_Chirp)
-	serv_mux.HandleFunc("POST /api/users", config.Handle_createUser)
 	serv_mux.HandleFunc("GET /api/healthz", handleHealthz)
+	serv_mux.HandleFunc("POST /api/users", config.Handle_createUser)
+	serv_mux.HandleFunc("POST /api/users/login", config.Handle_Login)
 
 	return serv_mux
 }
