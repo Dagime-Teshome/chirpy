@@ -1,7 +1,10 @@
 package main
 
 import (
+	"sync/atomic"
 	"time"
+
+	"github.com/Dagime-Teshome/chirpy/internal/database"
 )
 
 type chirp_body struct {
@@ -22,7 +25,8 @@ type err_resp struct {
 }
 
 type user_create struct {
-	Email string `json:"email"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 type user_response struct {
 	ID         string    `json:"id"`
@@ -30,3 +34,11 @@ type user_response struct {
 	Updated_at time.Time `json:"updated_at"`
 	Email      string    `json:"email"`
 }
+
+type apiConfig struct {
+	Platform       string
+	fileserverHits atomic.Int32
+	queries        database.Queries
+}
+
+type apiHandler struct{}
