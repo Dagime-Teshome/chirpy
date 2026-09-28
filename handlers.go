@@ -7,13 +7,14 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Dagime-Teshome/chirpy/internal/auth"
 	"github.com/Dagime-Teshome/chirpy/internal/database"
 	"github.com/google/uuid"
 )
 
 func (apiHandler) ServeHTTP(http.ResponseWriter, *http.Request) {}
 func (cfg *apiConfig) returnCount(w http.ResponseWriter, r *http.Request) {
-	w.Header().Add("Content-Type", " text/html; charset=utf-8")
+	w.Header().Add("Content-Type", " text/html;charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, `<html>
 						<body>
@@ -26,36 +27,50 @@ func (cfg *apiConfig) returnCount(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) resetCount(w http.ResponseWriter, r *http.Request) {
 	cfg.fileserverHits.Store(0)
-	w.Header().Add("Content-Type", " text/plain; charset=utf-8")
+	w.Header().Add("Content-Type", " text/plain;charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Count reset"))
 }
 
 func handleHealthz(w http.ResponseWriter, r *http.Request) {
-	w.Header().Add("Content-Type", " text/plain; charset=utf-8")
+	w.Header().Add("Content-Type", " text/plain;charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
 }
 
 func (cfg *apiConfig) Handle_createUser(w http.ResponseWriter, r *http.Request) {
-	var email_body = user_create{}
+	var req_body = user_create{}
 	data, err := io.ReadAll(r.Body)
-	if err != nil {
-		respondWithError(w, 500, "couldn't marsahll data")
-		return
-	}
-	json.Unmarshal(data, &email_body)
-	db_user, err := cfg.queries.CreateUser(r.Context(), email_body.Email)
-	if err != nil {
-		respondWithError(w, 500, "couldn't create user")
-		return
-	}
-
-	err = respondWithJSON(w, 201, db_user)
 	if err != nil {
 		respondWithError(w, 500, err.Error())
 		return
 	}
+	err = json.Unmarshal(data, &req_body)
+	if err != nil {
+		respondWithError(w, 500, err.Error())
+		return
+	}
+	pass_hash, err := auth.HashPassword(req_body.Password)
+	if err != nil {
+		respondWithError(w, 500, err.Error())
+		return
+	}
+	user_param := database.CreateUserParams{
+		Email:          req_body.Email,
+		HashedPassword: pass_hash,
+	}
+	db_user, err := cfg.queries.CreateUser(r.Context(), user_param)
+	if err != nil {
+		respondWithError(w, 500, "couldn't create user")
+		return
+	}
+	user_json := user_response{
+		Email:      db_user.Email,
+		Created_at: db_user.CreatedAt,
+		Updated_at: db_user.UpdatedAt,
+		ID:         db_user.ID.String(),
+	}
+	err = respondWithJSON(w, 201, user_json)
 
 }
 func (cfg *apiConfig) Handle_DeleteUsers(w http.ResponseWriter, r *http.Request) {
@@ -104,8 +119,10 @@ func (cfg *apiConfig) Handle_Chirp(w http.ResponseWriter, r *http.Request) {
 	db_chipr, err := cfg.queries.CreateChirp(r.Context(), chirp_param)
 	if err != nil {
 		respondWithError(w, 500, err.Error())
+		return
 	}
 	respondWithJSON(w, 200, db_chipr)
+
 }
 func (cfg *apiConfig) List_Chirps(w http.ResponseWriter, r *http.Request) {
 
@@ -115,7 +132,6 @@ func (cfg *apiConfig) List_Chirps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondWithJSON(w, 200, chirps)
-
 }
 
 func (cfg *apiConfig) GetChirp(w http.ResponseWriter, r *http.Request) {
@@ -131,4 +147,41 @@ func (cfg *apiConfig) GetChirp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondWithJSON(w, 200, chirp)
+
+}
+
+func (cfg *apiConfig) Handle_Login(w http.ResponseWriter, r *http.Request) {
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		respondWithError(w, 500, err.Error())
+		return
+	}
+	var user_data = user_create{}
+	err = json.Unmarshal(data, &user_data)
+	if err != nil {
+		respondWithError(w, 500, err.Error())
+		return
+	}
+	db_user, err := cfg.queries.GerUserByEmail(r.Context(), user_data.Email)
+	if err != nil {
+		respondWithError(w, 500, err.Error())
+		return
+	}
+	match, err := auth.CheckPasswordHash(user_data.Password, db_user.HashedPassword)
+	if err != nil {
+		respondWithError(w, 500, err.Error())
+		return
+	}
+	if !match {
+		respondWithError(w, 401, "Incorrect email or password")
+		return
+	}
+
+	user_json := user_response{
+		Email:      db_user.Email,
+		Created_at: db_user.CreatedAt,
+		Updated_at: db_user.UpdatedAt,
+		ID:         db_user.ID.String(),
+	}
+	err = respondWithJSON(w, 200, user_json)
 }
