@@ -16,6 +16,7 @@ func main() {
 	godotenv.Load()
 	conn_string := os.Getenv("DB_URL")
 	platform_env := os.Getenv("PLATFORM")
+	sign_secret := os.Getenv("SECRET")
 	db, err := sql.Open("postgres", conn_string)
 	if err != nil {
 		fmt.Println("database connection failed:", err)
@@ -27,6 +28,7 @@ func main() {
 		Platform:       platform_env,
 		fileserverHits: atomic.Int32{},
 		queries:        *database_queries,
+		secret:         sign_secret,
 	}
 	serv_mux := routes(&apiConfig)
 	var srv http.Server
