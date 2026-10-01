@@ -14,6 +14,8 @@ func routes(config *apiConfig) *http.ServeMux {
 	serv_mux.HandleFunc("GET /api/healthz", handleHealthz)
 	serv_mux.HandleFunc("POST /api/users", config.Handle_createUser)
 	serv_mux.HandleFunc("POST /api/users/login", config.Handle_Login)
+	serv_mux.HandleFunc("POST /api/revoke", config.Handle_Token_Revoke)
+	serv_mux.HandleFunc("POST /api/refresh", config.Handle_Token_Refresh)
 
 	return serv_mux
 }
