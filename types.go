@@ -25,16 +25,16 @@ type err_resp struct {
 }
 
 type user_create struct {
-	Email              string `json:"email"`
-	Password           string `json:"password"`
-	Expires_In_Seconds int    `json:"expires_in_seconds"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 type user_response struct {
-	ID         string    `json:"id"`
-	Created_at time.Time `json:"created_at"`
-	Updated_at time.Time `json:"updated_at"`
-	Email      string    `json:"email"`
-	Token      string    `json:"token"`
+	ID            string    `json:"id"`
+	Created_at    time.Time `json:"created_at"`
+	Updated_at    time.Time `json:"updated_at"`
+	Email         string    `json:"email"`
+	Token         string    `json:"token"`
+	Refresh_Token string    `json:"refresh_token"`
 }
 
 type apiConfig struct {
@@ -43,5 +43,7 @@ type apiConfig struct {
 	queries        database.Queries
 	secret         string
 }
-
+type token_refresh struct {
+	Token string `json:"token"`
+}
 type apiHandler struct{}
