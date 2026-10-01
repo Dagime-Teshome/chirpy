@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Dagime-Teshome/chirpy/internal/auth"
 	"github.com/Dagime-Teshome/chirpy/internal/database"
@@ -111,9 +112,20 @@ func (cfg *apiConfig) Handle_Chirp(w http.ResponseWriter, r *http.Request) {
 		"FORNAX", "****",
 	)
 	cleanText := replacer.Replace(Req_body.Body)
-	parsed_user_id, _ := uuid.Parse(Req_body.User_id)
+	// parsed_user_id, _ := uuid.Parse(Req_body.User_id)
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, 500, err.Error())
+		return
+	}
+	user_id, err := auth.ValidateJWT(token, cfg.secret)
+	fmt.Println("id " + user_id.String())
+	if err != nil {
+		respondWithError(w, 401, "Unauthorized ")
+		return
+	}
 	chirp_param := database.CreateChirpParams{
-		UserID: parsed_user_id,
+		UserID: user_id,
 		Body:   cleanText,
 	}
 	db_chipr, err := cfg.queries.CreateChirp(r.Context(), chirp_param)
@@ -156,11 +168,16 @@ func (cfg *apiConfig) Handle_Login(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, 500, err.Error())
 		return
 	}
-	var user_data = user_create{}
+	var user_data = user_create{
+		Expires_In_Seconds: 120,
+	}
 	err = json.Unmarshal(data, &user_data)
 	if err != nil {
 		respondWithError(w, 500, err.Error())
 		return
+	}
+	if user_data.Expires_In_Seconds > 120 {
+		user_data.Expires_In_Seconds = 120
 	}
 	db_user, err := cfg.queries.GerUserByEmail(r.Context(), user_data.Email)
 	if err != nil {
@@ -168,6 +185,7 @@ func (cfg *apiConfig) Handle_Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	match, err := auth.CheckPasswordHash(user_data.Password, db_user.HashedPassword)
+
 	if err != nil {
 		respondWithError(w, 500, err.Error())
 		return
@@ -176,12 +194,17 @@ func (cfg *apiConfig) Handle_Login(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, 401, "Incorrect email or password")
 		return
 	}
-
+	token, err := auth.MakeJWT(db_user.ID, cfg.secret, time.Duration(user_data.Expires_In_Seconds)*time.Second)
+	if err != nil {
+		respondWithError(w, 500, err.Error())
+		return
+	}
 	user_json := user_response{
 		Email:      db_user.Email,
 		Created_at: db_user.CreatedAt,
 		Updated_at: db_user.UpdatedAt,
 		ID:         db_user.ID.String(),
+		Token:      token,
 	}
 	err = respondWithJSON(w, 200, user_json)
 }
