@@ -168,16 +168,11 @@ func (cfg *apiConfig) Handle_Login(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, 500, err.Error())
 		return
 	}
-	var user_data = user_create{
-		Expires_In_Seconds: 120,
-	}
+	var user_data = user_create{}
 	err = json.Unmarshal(data, &user_data)
 	if err != nil {
 		respondWithError(w, 500, err.Error())
 		return
-	}
-	if user_data.Expires_In_Seconds > 120 {
-		user_data.Expires_In_Seconds = 120
 	}
 	db_user, err := cfg.queries.GerUserByEmail(r.Context(), user_data.Email)
 	if err != nil {
@@ -194,17 +189,64 @@ func (cfg *apiConfig) Handle_Login(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, 401, "Incorrect email or password")
 		return
 	}
-	token, err := auth.MakeJWT(db_user.ID, cfg.secret, time.Duration(user_data.Expires_In_Seconds)*time.Second)
+	token, err := auth.MakeJWT(db_user.ID, cfg.secret)
+	if err != nil {
+		respondWithError(w, 500, err.Error())
+		return
+	}
+
+	ref_tok_args := database.Create_Refresh_TokenParams{
+		Token:  auth.MakeRefreshToken(),
+		UserID: db_user.ID,
+	}
+	db_ref_token, err := cfg.queries.Create_Refresh_Token(r.Context(), ref_tok_args)
 	if err != nil {
 		respondWithError(w, 500, err.Error())
 		return
 	}
 	user_json := user_response{
-		Email:      db_user.Email,
-		Created_at: db_user.CreatedAt,
-		Updated_at: db_user.UpdatedAt,
-		ID:         db_user.ID.String(),
-		Token:      token,
+		Email:         db_user.Email,
+		Created_at:    db_user.CreatedAt,
+		Updated_at:    db_user.UpdatedAt,
+		ID:            db_user.ID.String(),
+		Token:         token,
+		Refresh_Token: db_ref_token.Token,
 	}
 	err = respondWithJSON(w, 200, user_json)
+}
+
+func (cfg *apiConfig) Handle_Token_Revoke(w http.ResponseWriter, r *http.Request) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, 500, err.Error())
+		return
+	}
+	err = cfg.queries.Revoke_Refresh_Token(r.Context(), token)
+	if err != nil {
+		respondWithError(w, 500, err.Error())
+		return
+	}
+	respondWithJSON(w, 204, "Toke Revoked")
+}
+func (cfg *apiConfig) Handle_Token_Refresh(w http.ResponseWriter, r *http.Request) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, 500, err.Error())
+		return
+	}
+	db_rf_tok, err := cfg.queries.GetUserFromRefreshToken(r.Context(), token)
+	if err != nil {
+		respondWithError(w, 401, err.Error())
+		return
+	}
+	if db_rf_tok.RevokedAt.Valid || !db_rf_tok.ExpiresAt.After(time.Now()) {
+		respondWithError(w, 401, "refresh token invalid")
+		return
+	}
+	jwt_token, err := auth.MakeJWT(db_rf_tok.UserID, cfg.secret)
+	if err != nil {
+		respondWithError(w, 401, err.Error())
+		return
+	}
+	respondWithJSON(w, 201, token_refresh{Token: jwt_token})
 }
