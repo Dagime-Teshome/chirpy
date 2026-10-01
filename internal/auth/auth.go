@@ -1,6 +1,10 @@
 package auth
 
 import (
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/alexedwards/argon2id"
@@ -35,7 +39,7 @@ func MakeJWT(userID uuid.UUID, tokenSecret string, expiresIn time.Duration) (str
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	ss, err := token.SignedString(tokenSecret)
+	ss, err := token.SignedString([]byte(tokenSecret))
 	if err != nil {
 		return "", err
 	}
@@ -46,6 +50,7 @@ func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &jwt.RegisteredClaims{}, func(t *jwt.Token) (any, error) {
 		return []byte(tokenSecret), nil
 	})
+	fmt.Println("from valid ", token)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -56,4 +61,13 @@ func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 	}
 
 	return uuid.Parse(sub)
+}
+
+func GetBearerToken(headers http.Header) (string, error) {
+	raw_token := headers.Get("Authorization")
+	if raw_token == "" {
+		return "", errors.New("Authoriztion not set")
+	}
+	token := strings.TrimSpace(strings.ReplaceAll(raw_token, "Bearer", ""))
+	return token, nil
 }
