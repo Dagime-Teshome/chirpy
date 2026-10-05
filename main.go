@@ -17,6 +17,7 @@ func main() {
 	conn_string := os.Getenv("DB_URL")
 	platform_env := os.Getenv("PLATFORM")
 	sign_secret := os.Getenv("SECRET")
+	api_key := os.Getenv("API_KEY")
 	db, err := sql.Open("postgres", conn_string)
 	if err != nil {
 		fmt.Println("database connection failed:", err)
@@ -29,6 +30,7 @@ func main() {
 		fileserverHits: atomic.Int32{},
 		queries:        *database_queries,
 		secret:         sign_secret,
+		api_key:        api_key,
 	}
 	serv_mux := routes(&apiConfig)
 	var srv http.Server
