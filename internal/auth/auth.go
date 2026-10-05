@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -52,7 +51,6 @@ func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &jwt.RegisteredClaims{}, func(t *jwt.Token) (any, error) {
 		return []byte(tokenSecret), nil
 	})
-	fmt.Println("from valid ", token)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -78,4 +76,13 @@ func MakeRefreshToken() string {
 	key := make([]byte, 32)
 	rand.Read(key)
 	return hex.EncodeToString(key)
+}
+
+func GetAPIKey(headers http.Header) (string, error) {
+	Authorization_header := headers.Get("Authorization")
+	if Authorization_header == "" {
+		return "", errors.New("Authorization not set")
+	}
+	api_key := strings.TrimSpace(strings.ReplaceAll(Authorization_header, "ApiKey ", ""))
+	return api_key, nil
 }
