@@ -66,10 +66,11 @@ func (cfg *apiConfig) Handle_createUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	user_json := user_response{
-		Email:      db_user.Email,
-		Created_at: db_user.CreatedAt,
-		Updated_at: db_user.UpdatedAt,
-		ID:         db_user.ID.String(),
+		Email:         db_user.Email,
+		Created_at:    db_user.CreatedAt,
+		Updated_at:    db_user.UpdatedAt,
+		ID:            db_user.ID.String(),
+		Is_Chirpy_Red: db_user.IsChirpyRed,
 	}
 	err = respondWithJSON(w, 201, user_json)
 
@@ -119,7 +120,6 @@ func (cfg *apiConfig) Handle_Chirp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user_id, err := auth.ValidateJWT(token, cfg.secret)
-	fmt.Println("id " + user_id.String())
 	if err != nil {
 		respondWithError(w, 401, "Unauthorized ")
 		return
@@ -137,7 +137,21 @@ func (cfg *apiConfig) Handle_Chirp(w http.ResponseWriter, r *http.Request) {
 
 }
 func (cfg *apiConfig) List_Chirps(w http.ResponseWriter, r *http.Request) {
-
+	s := r.URL.Query().Get("author_id")
+	if s != "" {
+		id, err := uuid.Parse(s)
+		if err != nil {
+			respondWithError(w, 400, "can't parse user: "+err.Error())
+			return
+		}
+		chirps, err := cfg.queries.ListChirpsByAuthor(r.Context(), id)
+		if err != nil {
+			respondWithError(w, 500, err.Error())
+			return
+		}
+		respondWithJSON(w, 200, chirps)
+		return
+	}
 	chirps, err := cfg.queries.ListChirps(r.Context())
 	if err != nil {
 		respondWithError(w, 500, err.Error())
@@ -211,6 +225,7 @@ func (cfg *apiConfig) Handle_Login(w http.ResponseWriter, r *http.Request) {
 		ID:            db_user.ID.String(),
 		Token:         token,
 		Refresh_Token: db_ref_token.Token,
+		Is_Chirpy_Red: db_user.IsChirpyRed,
 	}
 	err = respondWithJSON(w, 200, user_json)
 }
@@ -249,4 +264,147 @@ func (cfg *apiConfig) Handle_Token_Refresh(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	respondWithJSON(w, 201, token_refresh{Token: jwt_token})
+}
+
+func (cfg *apiConfig) Handle_Update_User(w http.ResponseWriter, r *http.Request) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, 401, err.Error())
+		return
+	}
+	body_byte, err := io.ReadAll(r.Body)
+	if err != nil {
+		respondWithError(w, 500, "coudn't read body: "+err.Error())
+		return
+	}
+	update_body := user_create{}
+	err = json.Unmarshal(body_byte, &update_body)
+	if err != nil {
+		respondWithError(w, 400, "malformed jason")
+		return
+	}
+	if update_body.Email == "" || update_body.Password == "" {
+		respondWithError(w, 400, "user needs values for email and password")
+		return
+	}
+
+	user_id, err := auth.ValidateJWT(token, cfg.secret)
+	if err != nil {
+		respondWithError(w, 401, err.Error())
+		return
+	}
+	_, err = cfg.queries.GetUserByID(r.Context(), user_id)
+	if err != nil {
+		respondWithError(w, 401, "user not found: "+err.Error())
+		return
+	}
+	hashed_pass, err := auth.HashPassword(update_body.Password)
+	if err != nil {
+		respondWithError(w, 500, "invalid password: "+err.Error())
+		return
+	}
+	user_Update_args := database.UpdateUserParams{
+		Email:          update_body.Email,
+		HashedPassword: hashed_pass,
+		ID:             user_id,
+	}
+	updated_user, err := cfg.queries.UpdateUser(r.Context(), user_Update_args)
+
+	if err != nil {
+		respondWithError(w, 500, "user not updated :"+err.Error())
+		return
+	}
+
+	user_resp := user_response{
+		Email:         updated_user.Email,
+		Created_at:    updated_user.CreatedAt,
+		Updated_at:    updated_user.UpdatedAt,
+		ID:            updated_user.ID.String(),
+		Is_Chirpy_Red: updated_user.IsChirpyRed,
+	}
+	respondWithJSON(w, 200, user_resp)
+}
+
+func (cfg *apiConfig) Handle_Delete_Chirp(w http.ResponseWriter, r *http.Request) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, 401, "unauthorized: "+err.Error())
+		return
+	}
+	userId, err := auth.ValidateJWT(token, cfg.secret)
+	if err != nil {
+		respondWithError(w, 401, "unauthorized: "+err.Error())
+		return
+	}
+	chirp_id_str := r.PathValue("chirpID")
+	chirp_id, err := uuid.Parse(chirp_id_str)
+	if err != nil {
+		respondWithError(w, 400, "invalid chirp ID")
+		return
+	}
+	db_chirp, err := cfg.queries.GetChirp(r.Context(), chirp_id)
+	if err != nil {
+		respondWithError(w, 404, "chirp not found")
+		return
+	}
+	if db_chirp.UserID != userId {
+		respondWithError(w, 403, "forbidden")
+		return
+	}
+	err = cfg.queries.DeleteChirps(r.Context(), chirp_id)
+	if err != nil {
+		respondWithError(w, 500, err.Error())
+		return
+	}
+	respondWithJSON(w, 200, "chirp deleted succesfully")
+}
+
+func (cfg *apiConfig) Handle_Hook_Call(w http.ResponseWriter, r *http.Request) {
+	body_byte, err := io.ReadAll(r.Body)
+	if err != nil {
+		respondWithError(w, 500, "couldn't read body")
+		return
+	}
+	head_api_key, err := auth.GetAPIKey(r.Header)
+	if err != nil {
+		respondWithError(w, 403, "can't read header : "+err.Error())
+		return
+	}
+	if head_api_key != cfg.api_key {
+		respondWithError(w, 401, "Unauthorized")
+		return
+	}
+
+	hook_body := hook_body{}
+	err = json.Unmarshal(body_byte, &hook_body)
+	if err != nil {
+		respondWithError(w, 400, "can't read unmarshal json:"+err.Error())
+		return
+	}
+	if hook_body.Event != "user.upgraded" {
+		respondWithJSON(w, 204, "")
+		return
+	}
+	user_id, err := uuid.Parse(hook_body.Data.User_id)
+	if err != nil {
+		respondWithError(w, 400, "can't parse string: "+err.Error())
+		return
+	}
+	_, err = cfg.queries.GetUserByID(r.Context(), user_id)
+
+	if err != nil {
+		respondWithError(w, 404, "user not found")
+		return
+	}
+	update_user := database.UpdateUserMembershipParams{
+		ID:          user_id,
+		IsChirpyRed: true,
+	}
+	updated_user, err := cfg.queries.UpdateUserMembership(r.Context(), update_user)
+
+	if err != nil {
+		respondWithError(w, 500, "couldn't update"+err.Error())
+		return
+	}
+	respondWithJSON(w, 204, updated_user)
 }
