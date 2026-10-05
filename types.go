@@ -33,8 +33,9 @@ type user_response struct {
 	Created_at    time.Time `json:"created_at"`
 	Updated_at    time.Time `json:"updated_at"`
 	Email         string    `json:"email"`
-	Token         string    `json:"token"`
-	Refresh_Token string    `json:"refresh_token"`
+	Token         string    `json:"token,omitempty"`
+	Refresh_Token string    `json:"refresh_token,omitempty"`
+	Is_Chirpy_Red bool      `json:"is_chirpy_red "`
 }
 
 type apiConfig struct {
@@ -42,8 +43,17 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 	queries        database.Queries
 	secret         string
+	api_key        string
 }
 type token_refresh struct {
 	Token string `json:"token"`
 }
 type apiHandler struct{}
+
+type hook_data struct {
+	User_id string `json:"user_id"`
+}
+type hook_body struct {
+	Event string    `json:"event"`
+	Data  hook_data `json:"data"`
+}
