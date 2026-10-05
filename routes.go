@@ -16,6 +16,9 @@ func routes(config *apiConfig) *http.ServeMux {
 	serv_mux.HandleFunc("POST /api/users/login", config.Handle_Login)
 	serv_mux.HandleFunc("POST /api/revoke", config.Handle_Token_Revoke)
 	serv_mux.HandleFunc("POST /api/refresh", config.Handle_Token_Refresh)
+	serv_mux.HandleFunc("PUT /api/users", config.Handle_Update_User)
+	serv_mux.HandleFunc("DELETE /api/chirps/{chirpID}", config.Handle_Delete_Chirp)
+	serv_mux.HandleFunc("POST /api/polka/webhooks", config.Handle_Hook_Call)
 
 	return serv_mux
 }
